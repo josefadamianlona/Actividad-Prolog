@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Inscripción de Cursos con Tau Prolog</title>
+    
+    <script src="tau-prolog.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #ffffff; /* Fondo blanco */
+            color: #ff1493; /* Rosa neon */
+            padding: 20px;
+            margin: 0 auto;
+            max-width: 800px;
+        }
+
+        h1, h2 {
+            font-weight: bold;
+            color: #ff1493;
+            text-shadow: 0 0 10px #ff66c4;
+        }
+
+        select, input[type="button"] {
+            padding: 10px;
+            margin: 5px 10px 5px 0;
+            font-size: 15px;
+            border: 2px solid #ff1493;
+            border-radius: 5px;
+            background: #ffffff;
+            color: #ff1493;
+            box-shadow: 0 0 10px #ff66c4;
+            transition: 0.3s;
+        }
+
+        input[type="button"]:hover {
+            background: #ff1493;
+            color: white;
+            box-shadow: 0 0 15px #ff1493;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #resultado {
+            margin-top: 20px;
+            padding: 15px;
+            border: 2px solid #ff1493;
+            border-radius: 8px;
+            box-shadow: 0 0 15px #ff66c4;
+            background: #ffe6f6;
+        }
+
+        label {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Sistema de Verificación de Inscripción de Cursos</h1>
+    <p>Este sistema utiliza Prolog para determinar si un alumno puede inscribir un curso basado en los prerrequisitos aprobados.</p>
+
+    <h2>Consulta de Elegibilidad</h2>
+
+    <label for="alumno">Alumno:</label>
+    <select id="alumno">
+        <option value="juan">Juan</option>
+        <option value="ana">Ana</option>
+        <option value="pedro">Pedro</option>
+        <option value="sofia">Sofía</option>
+    </select>
+
+    <label for="materia">Materia:</label>
+    <select id="materia">
+        <option value="matematicas_i">Matemáticas I</option>
+        <option value="introduccion_programacion">Introducción a la Programación</option>
+        <option value="matematicas_ii">Matemáticas II</option>
+        <option value="programacion_orientada_objetos">Programación Orientada a Objetos</option>
+        <option value="estructuras_de_datos">Estructuras de Datos</option>
+        <option value="bases_de_datos_i">Bases de Datos I</option>
+    </select>
+
+    <input type="button" value="Verificar Elegibilidad" onclick="verificarInscripcion()">
+
+    <div id="resultado">
+        <p>El resultado aparecerá aquí.</p>
+    </div>
+
+    <script id="cursos.pl" type="text/prolog">
+        curso_aprobado(juan, 'matematicas_i').
+        curso_aprobado(juan, 'introduccion_programacion').
+
+        curso_aprobado(ana, 'matematicas_i').
+        curso_aprobado(ana, 'introduccion_programacion').
+        curso_aprobado(ana, 'programacion_orientada_objetos').
+        curso_aprobado(ana, 'estructuras_de_datos').
+
+        curso_aprobado(pedro, 'matematicas_i').
+
+        prerrequisito('matematicas_ii', 'matematicas_i').
+        prerrequisito('programacion_orientada_objetos', 'introduccion_programacion').
+        prerrequisito('estructuras_de_datos', 'introduccion_programacion').
+        prerrequisito('bases_de_datos_i', 'estructuras_de_datos').
+
+        puede_inscribir(Alumno, Materia) :-
+            forall(prerrequisito(Materia, Prerrequisito), curso_aprobado(Alumno, Prerrequisito)).
+
+        prerrequisito_faltante(Alumno, Materia, Faltante) :-
+            prerrequisito(Materia, Faltante),
+            \+ curso_aprobado(Alumno, Faltante).
+    </script>
+
+    <script>
+        function verificarInscripcion() {
+            const alumno = document.getElementById("alumno").value;
+            const materia = document.getElementById("materia").value;
+            const resultadoDiv = document.getElementById("resultado");
+
+            const session = pl.create();
+            const program = document.getElementById("cursos.pl").textContent;
+            const ok = session.consult(program);
+
+            if (!ok) {
+                resultadoDiv.innerHTML = "<p>Error al cargar Prolog.</p>";
+                return;
+            }
+
+            const query = `puede_inscribir(${alumno}, '${materia}').`;
+            session.query(query);
+
+            session.answer(function(answer) {
+                if (answer === false) {
+                    resultadoDiv.innerHTML = `<p style="color:#ff0066"><b>❌ NO.</b> ${alumno} no puede inscribir ${materia}.</p>`;
+                    buscarPrerrequisitosFaltantes(session, alumno, materia);
+                } else {
+                    resultadoDiv.innerHTML = `<p style="color:#ff1493"><b>✔️ SÍ.</b> ${alumno} cumple los requisitos para inscribir ${materia}.</p>`;
+                }
+            });
+        }
+
+        function buscarPrerrequisitosFaltantes(session, alumno, materia) {
+            const resultadoDiv = document.getElementById("resultado");
+            const queryFaltantes = `prerrequisito_faltante(${alumno}, '${materia}', Faltante).`;
+            let faltantes = [];
+
+            session.query(queryFaltantes);
+
+            function obtenerRespuestas(answer) {
+                if (!answer) {
+                    if (faltantes.length > 0) {
+                        let listaHtml = "<ul>";
+                        faltantes.forEach(item => listaHtml += `<li>${item.replace(/_/g, " ")}</li>`);
+                        listaHtml += "</ul>";
+                        resultadoDiv.innerHTML += `<p>Prerrequisitos faltantes:</p>${listaHtml}`;
+                    }
+                    return;
+                }
+                if (pl.is_substitution(answer)) {
+                    faltantes.push(answer.lookup("Faltante").toString());
+                }
+                session.answer(obtenerRespuestas);
+            }
+            session.answer(obtenerRespuestas);
+        }
+    </script>
+
+</body>
+</html>
